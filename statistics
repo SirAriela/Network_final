@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""
+PCAP Analysis for Traffic Characteristic Comparison
+
+This script processes pcap files corresponding to different applications,
+extracts the packet arrival times, packet sizes, and calculates inter-arrival times,
+and then plots:
+  - A scatter plot of packet size vs. timestamp.
+  - A histogram of packet sizes.
+  - A histogram of packet inter-arrival times.
+
+Assumptions:
+- pcap files are stored in a subdirectory called "pcap_files".
+- Each pcap file is named after the app (e.g., chrome.pcap, edge.pcap, spotify.pcap).
+"""
+
+import os
+import glob
+import matplotlib.pyplot as plt
+from scapy.all import rdpcap
+from scapy.layers.inet import IP
+
+
+
+def analyze_pcap(file_path):
+    """
+    Reads a pcap file and extracts:
+      - timestamps: list of packet arrival times (in seconds)
+      - sizes: list of packet sizes in bytes
+      - inter_arrival: list of time differences between consecutive packets
+    Returns:
+      times, sizes, inter_arrival
+    """
+    try:
+        packets = rdpcap(file_path)
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+        return [], [], []
+
+    times = []
+    sizes = []
+    inter_arrival = []
+    prev_time = None
+
+    # Process each packet in the pcap file
+    for pkt in packets:
+        if IP in pkt:  # Only process IP packets
+            times.append(pkt.time)
+            sizes.append(len(pkt))
+            if prev_time is not None:
+                inter_arrival.append(pkt.time - prev_time)
+            prev_time = pkt.time
+    return times, sizes, inter_arrival
+
+def plot_scatter(app_data):
+    """
+    Creates a scatter plot of packet sizes (y-axis) versus packet arrival times (x-axis)
+    for each application.
+    """
+    plt.figure(figsize=(12, 8))
+    for app, data in app_data.items():
+        times, sizes, _ = data
+        plt.scatter(times, sizes, alpha=0.5, label=app)
+    plt.xlabel("Timestamp (s)")
+    plt.ylabel("Packet Size (bytes)")
+    plt.title("Packet Sizes Over Time")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("scatter_packet_sizes.png")
+    plt.show()
+
+def plot_histograms(app_data):
+    """
+    Creates two sets of histograms:
+      1. Packet Size Histogram: Compares the distribution of packet sizes.
+      2. Inter-arrival Time Histogram: Compares the distribution of packet inter-arrival times.
+    """
+    # Plot histogram for packet sizes
+    plt.figure(figsize=(12, 8))
+    for app, data in app_data.items():
+        _, sizes, _ = data
+        plt.hist(sizes, bins=30, alpha=0.5, label=app)
+    plt.xlabel("Packet Size (bytes)")
+    plt.ylabel("Frequency")
+    plt.title("Histogram of Packet Sizes")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("histogram_packet_sizes.png")
+    plt.show()
+
+    # Plot histogram for inter-arrival times
+    plt.figure(figsize=(12, 8))
+    for app, data in app_data.items():
+        _, _, inter_arrival = data
+        if inter_arrival:  # Only plot if data is available
+            plt.hist(inter_arrival, bins=30, alpha=0.5, label=app)
+    plt.xlabel("Inter-arrival Time (s)")
+    plt.ylabel("Frequency")
+    plt.title("Histogram of Packet Inter-arrival Times")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("histogram_interarrival_times.png")
+    plt.show()
+
+def main():
+    # Define the directory containing your pcap files (relative path)
+    pcap_dir = "/home/ariela/PycharmProjects/network"
+    pcap_files = glob.glob(os.path.join(pcap_dir, "*.pcapng"))
+
+    print("Files in directory:", os.listdir(pcap_dir))
+
+    if not pcap_files:
+        print("No pcap files found in directory", pcap_dir)
+        return
+
+    # Dictionary to hold data for each app: {app_name: (times, sizes, inter_arrival)}
+    app_data = {}
+    for pcap_file in pcap_files:
+        # Assume filename format: appname.pcap
+        base_name = os.path.basename(pcap_file)
+        app_name, _ = os.path.splitext(base_name)
+        times, sizes, inter_arrival = analyze_pcap(pcap_file)
+        app_data[app_name] = (times, sizes, inter_arrival)
+        print(f"Processed {app_name}: {len(times)} packets")
+
+    # Generate the plots
+    plot_scatter(app_data)
+    plot_histograms(app_data)
+
+if __name__ == "__main__":
+    main()
